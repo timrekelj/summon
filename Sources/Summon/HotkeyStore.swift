@@ -38,11 +38,13 @@ final class HotkeyStore {
     private(set) var errors: [AppHotkey.ID: String] = [:]
     private(set) var recordingID: AppHotkey.ID?
 
+    @ObservationIgnored private let settings: AppSettings
     @ObservationIgnored private let center = HotkeyCenter()
     @ObservationIgnored private var recordingMonitor: Any?
     @ObservationIgnored private let defaultsKey = "hotkeys"
 
-    init() {
+    init(settings: AppSettings) {
+        self.settings = settings
         center.onTrigger = { [weak self] id in
             guard let self, let hotkey = hotkeys.first(where: { $0.id == id }) else { return }
             launch(hotkey)
@@ -95,14 +97,14 @@ final class HotkeyStore {
         registerAll()
     }
 
-    func move(_ id: AppHotkey.ID, to targetID: AppHotkey.ID) {
-        guard id != targetID,
-              let source = hotkeys.firstIndex(where: { $0.id == id }),
-              let destination = hotkeys.firstIndex(where: { $0.id == targetID })
+    /// Moves a shortcut into the gap before the row at `gap` (`hotkeys.count` is after the last row).
+    func move(_ id: AppHotkey.ID, toGap gap: Int) {
+        guard let source = hotkeys.firstIndex(where: { $0.id == id }),
+              gap != source, gap != source + 1
         else { return }
 
         let hotkey = hotkeys.remove(at: source)
-        hotkeys.insert(hotkey, at: destination)
+        hotkeys.insert(hotkey, at: gap > source ? gap - 1 : gap)
         save()
     }
 
@@ -176,6 +178,12 @@ final class HotkeyStore {
     func launch(_ hotkey: AppHotkey) {
         guard let url = hotkey.resolvedURL else {
             errors[hotkey.id] = "App not found"
+            return
+        }
+        if settings.hidesWhenFrontmost,
+           let frontmost = NSWorkspace.shared.frontmostApplication,
+           frontmost.bundleURL == url || (hotkey.bundleID != nil && frontmost.bundleIdentifier == hotkey.bundleID) {
+            frontmost.hide()
             return
         }
         let configuration = NSWorkspace.OpenConfiguration()

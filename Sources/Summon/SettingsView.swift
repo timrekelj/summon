@@ -5,87 +5,57 @@ struct SettingsView: View {
     static let windowID = "settings"
 
     @Environment(HotkeyStore.self) private var store
+    @Environment(AppSettings.self) private var settings
+    @State private var rowMidpoints: [AppHotkey.ID: CGFloat] = [:]
+    @State private var dropGap: Int?
+    @State private var draggingID: AppHotkey.ID?
+    @State private var dragPoint: CGPoint = .zero
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 28) {
+                    header
 
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 10) {
                         HStack(spacing: 8) {
-                            Text("Shortcuts")
-                                .font(.headline)
+                            sectionTitle("Shortcuts")
                             Text("\(store.hotkeys.count)")
                                 .font(.caption.monospacedDigit())
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, 7)
                                 .padding(.vertical, 2)
                                 .background(.quaternary, in: Capsule())
-                            Spacer()
                         }
 
                         if store.hotkeys.isEmpty {
                             emptyState
                         } else {
-                            VStack(spacing: 0) {
-                                ForEach(store.hotkeys) { hotkey in
-                                    HotkeyRow(hotkey: hotkey)
-                                        .id(hotkey.id)
-                                    if hotkey.id != store.hotkeys.last?.id {
-                                        Divider().padding(.leading, 94)
-                                    }
-                                }
-                            }
-                            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 16))
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 16)
-                                    .strokeBorder(.primary.opacity(0.05))
-                            }
+                            shortcutList
 
-                            Label("Click to edit a shortcut. Drag the handle to reorder.", systemImage: "keyboard")
+                            Text("Click a shortcut to change it. Drag an app to reorder.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, 4)
                         }
                     }
-                    .padding(.horizontal, 28)
-                    .padding(.bottom, 24)
-                }
-                .scrollBounceBehavior(.basedOnSize)
-                .onChange(of: store.recordingID) { _, id in
-                    if let id {
-                        proxy.scrollTo(id, anchor: .center)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        sectionTitle("Settings")
+                        settingsList
                     }
                 }
+                .padding(.horizontal, 28)
+                .padding(.bottom, 28)
             }
-
-            Divider().padding(.horizontal, 28)
-
-            VStack(spacing: 16) {
-                LaunchAtLoginToggle()
-
-                Label("Summon lives in your menu bar", systemImage: "menubar.rectangle")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(.horizontal, 28)
-            .padding(.top, 18)
-            .padding(.bottom, 20)
-        }
-        .background {
-            Color(nsColor: .windowBackgroundColor)
-                .overlay(alignment: .topLeading) {
-                    RadialGradient(
-                        colors: [.indigo.opacity(0.09), .clear],
-                        center: .topLeading,
-                        startRadius: 0,
-                        endRadius: 340
-                    )
+            .scrollBounceBehavior(.basedOnSize)
+            .onChange(of: store.recordingID) { _, id in
+                if let id {
+                    proxy.scrollTo(id, anchor: .center)
                 }
-                .ignoresSafeArea()
+            }
         }
-        .tint(.indigo)
+        .background(Color(nsColor: .windowBackgroundColor).ignoresSafeArea())
         .frame(minWidth: 480, minHeight: 480)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -99,16 +69,153 @@ struct SettingsView: View {
         }
     }
 
+    private func sectionTitle(_ title: String) -> some View {
+        Text(title)
+            .font(.headline)
+            .padding(.horizontal, 4)
+    }
+
+    // MARK: Shortcuts
+
+    private var shortcutList: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(store.hotkeys.enumerated()), id: \.element.id) { index, hotkey in
+                if index > 0 {
+                    RowSeparator(isLit: litGap == index)
+                }
+                HotkeyRow(
+                    hotkey: hotkey,
+                    isDragging: draggingID == hotkey.id,
+                    onDrag: { dragChanged(hotkey.id, to: $0) },
+                    onDrop: dragEnded
+                )
+                    .id(hotkey.id)
+                    .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.listSpace)).midY } action: {
+                        rowMidpoints[hotkey.id] = $0
+                    }
+            }
+        }
+        .overlay(alignment: .top) {
+            RowSeparator(isLit: litGap == 0, showsRule: false).padding(.horizontal, 12)
+        }
+        .overlay(alignment: .bottom) {
+            RowSeparator(isLit: litGap == store.hotkeys.count, showsRule: false).padding(.horizontal, 12)
+        }
+        .coordinateSpace(.named(Self.listSpace))
+        .card()
+        .overlay(alignment: .topLeading) {
+            if let draggingID, let hotkey = store.hotkeys.first(where: { $0.id == draggingID }) {
+                DragGhost(hotkey: hotkey)
+                    // Keep the cursor over the ghost's icon.
+                    .offset(x: dragPoint.x - 24, y: dragPoint.y - 24)
+                    // Retargeting a spring keeps its velocity, so fast moves lag, catch up and overshoot.
+                    .animation(.spring(response: 0.32, dampingFraction: 0.62), value: dragPoint)
+                    .allowsHitTesting(false)
+                    .transition(.scale(scale: 0.85).combined(with: .opacity))
+            }
+        }
+        .animation(.easeOut(duration: 0.12), value: dropGap)
+    }
+
+    nonisolated static let listSpace = "shortcutList"
+
+    private func dragChanged(_ id: AppHotkey.ID, to point: CGPoint) {
+        dragPoint = point
+        dropGap = gap(at: point.y)
+        if draggingID == nil {
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.7)) { draggingID = id }
+            NSCursor.closedHand.push()
+        }
+    }
+
+    private func dragEnded() {
+        guard let draggingID else { return }
+        NSCursor.pop()
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            if let dropGap {
+                store.move(draggingID, toGap: dropGap)
+            }
+            self.draggingID = nil
+            dropGap = nil
+        }
+    }
+
+    /// The gap a drop at `y` lands in: the index of the first row whose middle is below it.
+    private func gap(at y: CGFloat) -> Int {
+        store.hotkeys.firstIndex { (rowMidpoints[$0.id] ?? .infinity) > y } ?? store.hotkeys.count
+    }
+
+    /// Only light gaps where dropping would actually move something.
+    private var litGap: Int? {
+        guard let dropGap else { return nil }
+        if let draggingID, let source = store.hotkeys.firstIndex(where: { $0.id == draggingID }),
+           dropGap == source || dropGap == source + 1 {
+            return nil
+        }
+        return dropGap
+    }
+
+    // MARK: Settings
+
+    private var settingsList: some View {
+        @Bindable var settings = settings
+
+        return VStack(spacing: 0) {
+            LaunchAtLoginRow()
+
+            RowSeparator(isLit: false)
+
+            SettingRow(
+                "Show in Dock",
+                detail: "Also lists Summon in the app switcher.",
+                systemImage: "dock.rectangle"
+            ) {
+                Toggle("Show in Dock", isOn: $settings.showsInDock)
+            }
+
+            RowSeparator(isLit: false)
+
+            SettingRow(
+                "Show menu bar icon",
+                detail: menuBarDetail,
+                systemImage: "menubar.rectangle"
+            ) {
+                Toggle("Show menu bar icon", isOn: $settings.showsMenuBarIcon)
+            }
+
+            RowSeparator(isLit: false)
+
+            SettingRow(
+                "Press again to hide",
+                detail: "Using a shortcut while its app is in front hides the app.",
+                systemImage: "eye.slash"
+            ) {
+                Toggle("Press again to hide", isOn: $settings.hidesWhenFrontmost)
+            }
+        }
+        .card()
+    }
+
+    private var menuBarDetail: String {
+        if settings.showsMenuBarIcon {
+            return "Your shortcuts and these settings, one click away."
+        }
+        return settings.showsInDock
+            ? "Click Summon in the Dock to get back here."
+            : "Open Summon from Finder or Spotlight to get back here."
+    }
+
+    // MARK: Header & empty state
+
     private var header: some View {
         HStack(spacing: 14) {
             Image(systemName: "command")
-                .font(.system(size: 23, weight: .medium))
-                .foregroundStyle(.indigo)
+                .font(.system(size: 22, weight: .medium))
                 .frame(width: 48, height: 48)
-                .glassEffect(.regular.tint(.indigo.opacity(0.12)), in: RoundedRectangle(cornerRadius: 14))
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
                 .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text("Your apps, on call.")
                     .font(.system(size: 22, weight: .semibold))
                 Text("Launch or focus. Just a keystroke away.")
@@ -117,19 +224,15 @@ struct SettingsView: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 28)
         .padding(.top, 20)
-        .padding(.bottom, 28)
     }
 
     private var emptyState: some View {
         VStack(spacing: 0) {
-            GlassEffectContainer(spacing: 8) {
-                HStack(spacing: 10) {
-                    decorativeKey("⌃", angle: -8)
-                    decorativeKey("⌘", angle: 0)
-                    decorativeKey("1", angle: 8)
-                }
+            HStack(spacing: 10) {
+                decorativeKey("⌃", angle: -8)
+                decorativeKey("⌘", angle: 0)
+                decorativeKey("1", angle: 8)
             }
             .accessibilityHidden(true)
             .padding(.bottom, 22)
@@ -146,81 +249,76 @@ struct SettingsView: View {
 
             Button("Add Your First App…", systemImage: "plus", action: store.addApps)
                 .labelStyle(.titleAndIcon)
-                .buttonStyle(.glassProminent)
+                .buttonStyle(.borderedProminent)
                 .controlSize(.large)
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 16)
         .padding(.vertical, 28)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.65), in: RoundedRectangle(cornerRadius: 20))
-        .overlay {
-            RoundedRectangle(cornerRadius: 20)
-                .strokeBorder(.primary.opacity(0.05))
-        }
+        .card()
     }
 
     private func decorativeKey(_ label: String, angle: Double) -> some View {
         Text(label)
-            .font(.system(size: 27, weight: .medium, design: .rounded))
-            .foregroundStyle(.indigo)
+            .font(.system(size: 26, weight: .medium, design: .rounded))
+            .foregroundStyle(.secondary)
             .frame(width: 52, height: 54)
-            .glassEffect(.regular.tint(.indigo.opacity(0.06)), in: RoundedRectangle(cornerRadius: 12))
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
             .rotationEffect(.degrees(angle))
+    }
+}
+
+private extension View {
+    /// The flat, bordered panel that groups rows together.
+    func card() -> some View {
+        background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 14))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14)
+                    .strokeBorder(.primary.opacity(0.06))
+            }
     }
 }
 
 private struct HotkeyRow: View {
     let hotkey: AppHotkey
+    let isDragging: Bool
+    let onDrag: (CGPoint) -> Void
+    let onDrop: () -> Void
 
     @Environment(HotkeyStore.self) private var store
-    @State private var isDropTarget = false
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: "line.3.horizontal")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.tertiary)
-                .frame(width: 16, height: 32)
-                .contentShape(Rectangle())
-                .help("Drag to reorder \(hotkey.name)")
-                .accessibilityLabel("Reorder \(hotkey.name)")
-                .draggable(ShortcutDrag(id: hotkey.id)) {
-                    Label {
-                        Text(hotkey.name)
-                    } icon: {
-                        Image(nsImage: hotkey.icon)
-                            .resizable()
-                            .frame(width: 24, height: 24)
+            HStack(spacing: 12) {
+                Image(nsImage: hotkey.icon)
+                    .resizable()
+                    .frame(width: 38, height: 38)
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(hotkey.name)
+                        .font(.body.weight(.medium))
+                    if let error = store.errors[hotkey.id] {
+                        Label(error, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    } else {
+                        Text(hotkey.combo == nil ? "Set a shortcut to get started" : "Launch or focus")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-                    .padding(12)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
                 }
-                .dragConfiguration(DragConfiguration(
-                    operationsWithinApp: .init(allowCopy: false, allowMove: true),
-                    operationsOutsideApp: .init(allowCopy: false)
-                ))
-                .allowsHitTesting(store.recordingID == nil)
 
-            Image(nsImage: hotkey.icon)
-                .resizable()
-                .frame(width: 38, height: 38)
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(hotkey.name)
-                    .font(.body.weight(.medium))
-                if let error = store.errors[hotkey.id] {
-                    Label(error, systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                } else {
-                    Text(hotkey.combo == nil ? "Set a shortcut to get started" : "Launch or focus")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                Spacer(minLength: 0)
             }
-
-            Spacer()
+            .contentShape(Rectangle())
+            .help("Drag to reorder")
+            .gesture(
+                DragGesture(minimumDistance: 3, coordinateSpace: .named(SettingsView.listSpace))
+                    .onChanged { onDrag($0.location) }
+                    .onEnded { _ in onDrop() }
+            )
+            .allowsHitTesting(store.recordingID == nil)
 
             ShortcutRecorder(hotkey: hotkey)
 
@@ -235,6 +333,7 @@ private struct HotkeyRow: View {
                 Button("Remove", role: .destructive) { store.remove(hotkey.id) }
             } label: {
                 Image(systemName: "ellipsis.circle")
+                    .foregroundStyle(.secondary)
             }
             .menuStyle(.button)
             .buttonStyle(.borderless)
@@ -244,27 +343,57 @@ private struct HotkeyRow: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 13)
+        .opacity(isDragging ? 0.35 : 1)
         .contentShape(Rectangle())
-        .background {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(.indigo.opacity(isDropTarget ? 0.12 : 0))
-                .padding(4)
-        }
-        .dropDestination(for: ShortcutDrag.self, isEnabled: store.recordingID == nil) { items, _ in
-            guard items.count == 1, let item = items.first else { return }
-            store.move(item.id, to: hotkey.id)
-            isDropTarget = false
-        }
-        .dropConfiguration { _ in DropConfiguration(operation: .move) }
-        .onDropSessionUpdated { session in
-            isDropTarget = session.phase == .entering || session.phase == .active
-        }
         .contextMenu {
             Button("Launch \(hotkey.name)") { store.launch(hotkey) }
             Button("Change App…") { store.changeApp(for: hotkey.id) }
             Divider()
             Button("Remove", role: .destructive) { store.remove(hotkey.id) }
         }
+    }
+}
+
+/// The floating copy of a row that springs after the cursor while reordering.
+private struct DragGhost: View {
+    let hotkey: AppHotkey
+
+    var body: some View {
+        Label {
+            Text(hotkey.name)
+                .font(.body.weight(.medium))
+        } icon: {
+            Image(nsImage: hotkey.icon)
+                .resizable()
+                .frame(width: 24, height: 24)
+        }
+        .padding(12)
+        .fixedSize()
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(.primary.opacity(0.1))
+        }
+        .shadow(color: .black.opacity(0.25), radius: 10, y: 5)
+    }
+}
+
+/// A full-width line between rows that lights up where a dragged shortcut will land.
+private struct RowSeparator: View {
+    let isLit: Bool
+    var showsRule = true
+
+    var body: some View {
+        Rectangle()
+            .fill(showsRule ? Color(nsColor: .separatorColor) : .clear)
+            .frame(height: 1)
+            .overlay {
+                Capsule()
+                    .fill(Color.accentColor)
+                    .frame(height: 2)
+                    .opacity(isLit ? 1 : 0)
+            }
+            .accessibilityHidden(true)
     }
 }
 
@@ -295,13 +424,13 @@ private struct ShortcutRecorder: View {
 
         if isRecording {
             VStack(alignment: .trailing, spacing: 5) {
-                button.buttonStyle(.glassProminent)
+                button.buttonStyle(.borderedProminent)
                 Text("Esc to cancel · Delete to clear")
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
             }
         } else {
-            button.buttonStyle(.glass)
+            button.buttonStyle(.bordered)
         }
     }
 
@@ -311,32 +440,68 @@ private struct ShortcutRecorder: View {
     }
 }
 
-private struct LaunchAtLoginToggle: View {
-    @State private var isEnabled = SMAppService.mainApp.status == .enabled
-    @State private var error: String?
+/// One line in the settings card: an icon, a title with a caption, and a control on the right.
+private struct SettingRow<Control: View>: View {
+    let title: String
+    let detail: String
+    let systemImage: String
+    var isWarning = false
+    @ViewBuilder let control: Control
+
+    init(
+        _ title: String,
+        detail: String,
+        systemImage: String,
+        isWarning: Bool = false,
+        @ViewBuilder control: () -> Control
+    ) {
+        self.title = title
+        self.detail = detail
+        self.systemImage = systemImage
+        self.isWarning = isWarning
+        self.control = control()
+    }
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: "power")
-                .font(.system(size: 16, weight: .medium))
+            Image(systemName: systemImage)
+                .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(.secondary)
                 .frame(width: 32, height: 32)
-                .background(.quaternary, in: RoundedRectangle(cornerRadius: 9))
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
                 .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Launch at login")
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
                     .font(.body.weight(.medium))
-                Text(error ?? "Your shortcuts, ready when you are.")
+                Text(detail)
                     .font(.caption)
-                    .foregroundStyle(error == nil ? Color.secondary : .orange)
+                    .foregroundStyle(isWarning ? Color.orange : .secondary)
             }
 
             Spacer(minLength: 12)
 
-            Toggle("Launch at login", isOn: $isEnabled)
+            control
                 .labelsHidden()
                 .toggleStyle(.switch)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+}
+
+private struct LaunchAtLoginRow: View {
+    @State private var isEnabled = SMAppService.mainApp.status == .enabled
+    @State private var error: String?
+
+    var body: some View {
+        SettingRow(
+            "Launch at login",
+            detail: error ?? "Your shortcuts, ready when you are.",
+            systemImage: "power",
+            isWarning: error != nil
+        ) {
+            Toggle("Launch at login", isOn: $isEnabled)
         }
         .onChange(of: isEnabled) { _, enabled in
             do {
