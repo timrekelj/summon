@@ -1,0 +1,7 @@
+.build/
+build/
+.swiftpm/
+.DS_Store
+
+# Local icon explorations; production artwork lives in Resources.
+Design/IconOptions/
