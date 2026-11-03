@@ -15,8 +15,9 @@ Requires macOS 26+ and Xcode / the Swift 6.2+ toolchain.
 
 - Open settings from the ⌘ icon in the menu bar.
 - Add apps with **+**, then click the shortcut button and press a key combination. Esc cancels, Delete clears.
-- Drag the handle on the left of a shortcut onto another row to reorder it. The order is saved and also used in the menu bar.
-- Pressing a shortcut launches the app, or brings it to the front if it's already running.
-- Turn on **Launch at login** in settings (works best from `/Applications`).
+- Drag an app's icon or name to reorder it. The order is saved and also used in the menu bar.
+- Pressing a shortcut launches the app, or brings it to the front if it's already running. With **Press again to hide** on, pressing it while the app is in front hides the app.
+- Settings: **Launch at login** (works best from `/Applications`), **Show in Dock**, **Show menu bar icon** and **Press again to hide**.
+- ⌘W and ⌘Q both just close the settings window; Summon keeps running. Quit from the menu bar icon or the Dock. If you've hidden the menu bar icon, open Summon again (Dock, Finder or Spotlight) to get back to settings.
 
 Hotkeys use Carbon's `RegisterEventHotKey`, so no Accessibility permission is needed. Remove the same shortcuts from Raycast, otherwise both apps will respond.
