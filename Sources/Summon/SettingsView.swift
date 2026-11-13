@@ -6,6 +6,7 @@ struct SettingsView: View {
 
     @Environment(HotkeyStore.self) private var store
     @Environment(AppSettings.self) private var settings
+    @Environment(SoundEffects.self) private var sounds
     @State private var rowMidpoints: [AppHotkey.ID: CGFloat] = [:]
     @State private var dropGap: Int?
     @State private var draggingID: AppHotkey.ID?
@@ -121,16 +122,21 @@ struct SettingsView: View {
 
     private func dragChanged(_ id: AppHotkey.ID, to point: CGPoint) {
         dragPoint = point
-        dropGap = gap(at: point.y)
+        let newGap = gap(at: point.y)
         if draggingID == nil {
             withAnimation(.spring(response: 0.25, dampingFraction: 0.7)) { draggingID = id }
             NSCursor.closedHand.push()
+            sounds.play(.pickUp)
+        } else if newGap != dropGap {
+            sounds.play(.tick)
         }
+        dropGap = newGap
     }
 
     private func dragEnded() {
         guard let draggingID else { return }
         NSCursor.pop()
+        sounds.play(.drop)
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
             if let dropGap {
                 store.move(draggingID, toGap: dropGap)
@@ -170,7 +176,7 @@ struct SettingsView: View {
                 detail: "Also lists Summon in the app switcher.",
                 systemImage: "dock.rectangle"
             ) {
-                Toggle("Show in Dock", isOn: $settings.showsInDock)
+                Toggle("Show in Dock", isOn: sounds.clicking($settings.showsInDock))
             }
 
             RowSeparator(isLit: false)
@@ -180,7 +186,7 @@ struct SettingsView: View {
                 detail: menuBarDetail,
                 systemImage: "menubar.rectangle"
             ) {
-                Toggle("Show menu bar icon", isOn: $settings.showsMenuBarIcon)
+                Toggle("Show menu bar icon", isOn: sounds.clicking($settings.showsMenuBarIcon))
             }
 
             RowSeparator(isLit: false)
@@ -190,7 +196,17 @@ struct SettingsView: View {
                 detail: "Using a shortcut while its app is in front hides the app.",
                 systemImage: "eye.slash"
             ) {
-                Toggle("Press again to hide", isOn: $settings.hidesWhenFrontmost)
+                Toggle("Press again to hide", isOn: sounds.clicking($settings.hidesWhenFrontmost))
+            }
+
+            RowSeparator(isLit: false)
+
+            SettingRow(
+                "Sound effects",
+                detail: "Soft clicks when you summon, reorder and record.",
+                systemImage: settings.playsSounds ? "speaker.wave.2" : "speaker.slash"
+            ) {
+                Toggle("Sound effects", isOn: sounds.clicking($settings.playsSounds))
             }
         }
         .card()
@@ -407,7 +423,7 @@ private struct ShortcutRecorder: View {
     var body: some View {
         let button = Button {
             if isRecording {
-                store.stopRecording()
+                store.cancelRecording()
             } else {
                 store.startRecording(hotkey.id)
             }
@@ -491,6 +507,7 @@ private struct SettingRow<Control: View>: View {
 }
 
 private struct LaunchAtLoginRow: View {
+    @Environment(SoundEffects.self) private var sounds
     @State private var isEnabled = SMAppService.mainApp.status == .enabled
     @State private var error: String?
 
@@ -501,7 +518,7 @@ private struct LaunchAtLoginRow: View {
             systemImage: "power",
             isWarning: error != nil
         ) {
-            Toggle("Launch at login", isOn: $isEnabled)
+            Toggle("Launch at login", isOn: sounds.clicking($isEnabled))
         }
         .onChange(of: isEnabled) { _, enabled in
             do {

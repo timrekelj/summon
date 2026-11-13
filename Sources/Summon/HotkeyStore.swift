@@ -39,12 +39,14 @@ final class HotkeyStore {
     private(set) var recordingID: AppHotkey.ID?
 
     @ObservationIgnored private let settings: AppSettings
+    @ObservationIgnored private let sounds: SoundEffects
     @ObservationIgnored private let center = HotkeyCenter()
     @ObservationIgnored private var recordingMonitor: Any?
     @ObservationIgnored private let defaultsKey = "hotkeys"
 
-    init(settings: AppSettings) {
+    init(settings: AppSettings, sounds: SoundEffects) {
         self.settings = settings
+        self.sounds = sounds
         center.onTrigger = { [weak self] id in
             guard let self, let hotkey = hotkeys.first(where: { $0.id == id }) else { return }
             launch(hotkey)
@@ -129,6 +131,7 @@ final class HotkeyStore {
     func startRecording(_ id: AppHotkey.ID) {
         stopRecording()
         recordingID = id
+        sounds.play(.recordStart)
         // Global hotkeys would swallow the keys being recorded.
         center.unregisterAll()
         recordingMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -154,11 +157,12 @@ final class HotkeyStore {
         if combo.modifiers == 0 {
             switch Int(event.keyCode) {
             case kVK_Escape:
-                stopRecording()
+                cancelRecording()
                 return
             case kVK_Delete, kVK_ForwardDelete:
                 setCombo(nil, for: recordingID)
                 stopRecording()
+                sounds.play(.recordClear)
                 return
             default:
                 break
@@ -166,11 +170,18 @@ final class HotkeyStore {
         }
 
         guard combo.isValid else {
-            NSSound.beep()
+            sounds.play(.invalid)
             return
         }
         setCombo(combo, for: recordingID)
         stopRecording()
+        sounds.play(.recorded)
+    }
+
+    /// Stops recording because the user backed out, as opposed to the window closing.
+    func cancelRecording() {
+        stopRecording()
+        sounds.play(.recordCancel)
     }
 
     // MARK: Launching
@@ -178,6 +189,7 @@ final class HotkeyStore {
     func launch(_ hotkey: AppHotkey) {
         guard let url = hotkey.resolvedURL else {
             errors[hotkey.id] = "App not found"
+            sounds.play(.invalid)
             return
         }
         if settings.hidesWhenFrontmost,
