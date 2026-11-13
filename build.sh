@@ -1,5 +1,6 @@
 #!/bin/zsh
 # Builds Summon.app into ./build. Pass `install` to copy it to /Applications and launch it.
+# Set SIGN_IDENTITY to sign with a real certificate instead of ad-hoc.
 set -euo pipefail
 cd "${0:A:h}"
 
@@ -11,7 +12,12 @@ mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$(swift build -c release --show-bin-path)/Summon" "$app/Contents/MacOS/Summon"
 cp Resources/Info.plist "$app/Contents/Info.plist"
 cp Resources/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
-codesign --force --sign - "$app"
+if [[ -n "${SIGN_IDENTITY:-}" ]]; then
+  # Distribution build: hardened runtime and a secure timestamp are required for notarization.
+  codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$app"
+else
+  codesign --force --sign - "$app"
+fi
 echo "Built $app"
 
 if [[ "${1:-}" == "install" ]]; then
