@@ -63,7 +63,7 @@ Requires Xcode or the Swift 6.2+ toolchain.
 | **Show in Dock** | Also lists Summon in the Dock and app switcher. |
 | **Show menu bar icon** | Shows the ⌘ icon with your shortcuts and settings. |
 | **Press again to hide** | Using a shortcut while its app is in front hides the app. |
-| **Sound effects** | Soft clicks when you summon or hide an app, reorder, record a shortcut or flip a switch. |
+| **Sound effects** | Soft clicks when you reorder, record a shortcut or flip a switch. |
 
 ### Good to know
 

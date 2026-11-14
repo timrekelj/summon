@@ -196,10 +196,8 @@ final class HotkeyStore {
            let frontmost = NSWorkspace.shared.frontmostApplication,
            frontmost.bundleURL == url || (hotkey.bundleID != nil && frontmost.bundleIdentifier == hotkey.bundleID) {
             frontmost.hide()
-            sounds.play(.hide)
             return
         }
-        sounds.play(.summon)
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = true
         // Launches the app if needed, otherwise brings it forward (and reopens a window if it has none).

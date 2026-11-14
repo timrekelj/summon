@@ -10,8 +10,6 @@ final class SoundEffects {
         case tick, pickUp, drop
         case recordStart, recorded, recordCancel, recordClear, invalid
         case toggleOn, toggleOff
-        /// A shortcut brings its app forward or hides it.
-        case summon, hide
     }
 
     @ObservationIgnored private let settings: AppSettings
@@ -121,16 +119,6 @@ final class SoundEffects {
                 Voice(from: 240, to: 160, glide: 0.03, attack: 0.002, decay: 0.06),
                 Voice(from: 480, to: 320, glide: 0.03, level: 0.3, attack: 0.002, decay: 0.03),
             ], 0.38)
-        case .summon:
-            ([
-                Voice(from: 494, to: 740, glide: 0.04, attack: 0.008, decay: 0.07),
-                Voice(from: 988, to: 1480, glide: 0.04, level: 0.15, attack: 0.008, decay: 0.04),
-            ], 0.13)
-        case .hide:
-            ([
-                Voice(from: 740, to: 494, glide: 0.04, attack: 0.008, decay: 0.07),
-                Voice(from: 1480, to: 988, glide: 0.04, level: 0.15, attack: 0.008, decay: 0.04),
-            ], 0.12)
         }
     }
 
