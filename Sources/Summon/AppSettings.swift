@@ -21,19 +21,25 @@ final class AppSettings {
         didSet { defaults.set(hidesWhenFrontmost, forKey: Key.hidesWhenFrontmost) }
     }
 
+    var playsSounds: Bool {
+        didSet { defaults.set(playsSounds, forKey: Key.playsSounds) }
+    }
+
     @ObservationIgnored private let defaults = UserDefaults.standard
 
     private enum Key {
         static let showsInDock = "showsInDock"
         static let showsMenuBarIcon = "showsMenuBarIcon"
         static let hidesWhenFrontmost = "hidesWhenFrontmost"
+        static let playsSounds = "playsSounds"
     }
 
     init() {
-        defaults.register(defaults: [Key.showsMenuBarIcon: true])
+        defaults.register(defaults: [Key.showsMenuBarIcon: true, Key.playsSounds: true])
         showsInDock = defaults.bool(forKey: Key.showsInDock)
         showsMenuBarIcon = defaults.bool(forKey: Key.showsMenuBarIcon)
         hidesWhenFrontmost = defaults.bool(forKey: Key.hidesWhenFrontmost)
+        playsSounds = defaults.bool(forKey: Key.playsSounds)
         applyActivationPolicy()
     }
 

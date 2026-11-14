@@ -5,6 +5,7 @@ struct SummonApp: App {
     @NSApplicationDelegateAdaptor private var appDelegate: AppDelegate
     @State private var settings: AppSettings
     @State private var store: HotkeyStore
+    @State private var sounds: SoundEffects
 
     /// Only show the settings window on its own the first time; afterwards Summon starts quietly in the menu bar.
     private let isFirstLaunch: Bool = {
@@ -16,7 +17,9 @@ struct SummonApp: App {
     init() {
         let settings = AppSettings()
         _settings = State(initialValue: settings)
-        _store = State(initialValue: HotkeyStore(settings: settings))
+        let sounds = SoundEffects(settings: settings)
+        _sounds = State(initialValue: sounds)
+        _store = State(initialValue: HotkeyStore(settings: settings, sounds: sounds))
     }
 
     var body: some Scene {
@@ -26,6 +29,7 @@ struct SummonApp: App {
             SettingsView()
                 .environment(store)
                 .environment(settings)
+                .environment(sounds)
         }
         .defaultSize(width: 560, height: 600)
         .windowResizability(.contentMinSize)
