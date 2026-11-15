@@ -24,7 +24,7 @@ struct MenuBarMenu: View {
 
         Button("Settings…") {
             openWindow(id: SettingsView.windowID)
-            NSApp.activate()
+            SettingsView.bringToFront()
         }
         .keyboardShortcut(",")
 

@@ -4,6 +4,19 @@ import SwiftUI
 struct SettingsView: View {
     static let windowID = "settings"
 
+    /// Activating alone can be declined and `openWindow` won't reorder an open window, so order it front explicitly.
+    @MainActor static func bringToFront() {
+        NSApp.activate()
+        DispatchQueue.main.async {
+            guard let window = NSApp.windows.first(where: { $0.identifier?.rawValue.contains(windowID) == true }) else { return }
+            if window.isMiniaturized {
+                window.deminiaturize(nil)
+            }
+            window.makeKeyAndOrderFront(nil)
+            window.orderFrontRegardless()
+        }
+    }
+
     @Environment(HotkeyStore.self) private var store
     @Environment(AppSettings.self) private var settings
     @Environment(SoundEffects.self) private var sounds

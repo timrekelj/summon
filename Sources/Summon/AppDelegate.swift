@@ -12,7 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !flag {
             EnvironmentValues().openWindow(id: SettingsView.windowID)
         }
-        NSApp.activate()
+        SettingsView.bringToFront()
         return false
     }
 }
